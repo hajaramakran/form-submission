@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>WP Articles</title>
+  <link
+    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
+    rel="stylesheet"
+  />
+  <style>
+    #article-detail {
+      display: none;
+    }
+    .cursor-pointer {
+      cursor: pointer;
+    }
+    /* Limit excerpt height */
+    .excerpt {
+      max-height: 4.5em; /* ~3 lines */
+      overflow: hidden;
+    }
+    .featured-img {
+      max-height: 180px;
+      object-fit: cover;
+      width: 100%;
+    }
+  </style>
+</head>
+<body>
+  <div class="container my-4">
+    <h1 class="mb-4">WordPress Articles</h1>
+
+    <!-- List view -->
+    <div id="article-list">
+      <div id="articles" class="row gy-4"></div>
+      <nav>
+        <ul id="pagination" class="pagination justify-content-center mt-4"></ul>
+      </nav>
+    </div>
+
+    <!-- Article detail view -->
+    <div id="article-detail">
+      <button id="back-btn" class="btn btn-secondary mb-3">← Back to articles</button>
+      <h2 id="detail-title"></h2>
+      <img id="detail-image" class="img-fluid mb-3" alt="Featured Image" />
+      <div id="detail-content"></div>
+    </div>
+  </div>
+
+  <script>
+    const apiBase = 'https://bisque-chinchilla-962517.hostingersite.com/wp-json/wp/v2/posts';
+    const postsPerPage = 12;
+
+    let currentPage = 1;
+    let totalPages = 1;
+
+    const articlesEl = document.getElementById('articles');
+    const paginationEl = document.getElementById('pagination');
+    const listView = document.getElementById('article-list');
+    const detailView = document.getElementById('article-detail');
+    const detailTitle = document.getElementById('detail-title');
+    const detailContent = document.getElementById('detail-content');
+    const detailImage = document.getElementById('detail-image');
+    const backBtn = document.getElementById('back-btn');
+
+    backBtn.addEventListener('click', () => {
+      detailView.style.display = 'none';
+      listView.style.display = 'block';
+      detailTitle.textContent = '';
+      detailContent.innerHTML = '';
+      detailImage.src = '';
+    });
+
+    async function fetchArticles(page = 1) {
+      // Request 12 posts per page, embed featured media for images
+      const url = `${apiBase}?per_page=${postsPerPage}&page=${page}&_embed`;
+      try {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('Failed to fetch posts');
+        const posts = await res.json();
+
+        // Total pages in header
+        totalPages = parseInt(res.headers.get('X-WP-TotalPages')) || 1;
+        currentPage = page;
+
+        renderArticles(posts);
+        renderPagination();
+      } catch (err) {
+        articlesEl.innerHTML = `<div class="alert alert-danger">${err.message}</div>`;
+        paginationEl.innerHTML = '';
+      }
+    }
+
+    function renderArticles(posts) {
+      articlesEl.innerHTML = '';
+
+      if (!posts.length) {
+        articlesEl.innerHTML = `<p>No articles found.</p>`;
+        return;
+      }
+
+      posts.forEach(post => {
+        const featuredMedia = post._embedded?.['wp:featuredmedia']?.[0];
+        const imgSrc = featuredMedia?.source_url || 'https://via.placeholder.com/400x180?text=No+Image';
+
+        const card = document.createElement('div');
+        card.className = 'col-md-4';
+
+        card.innerHTML = `
+          <div class="card h-100 cursor-pointer">
+            <img src="${imgSrc}" class="card-img-top featured-img" alt="Featured Image" />
+            <div class="card-body d-flex flex-column">
+              <h5 class="card-title">${post.title.rendered}</h5>
+              <p class="card-text excerpt">${post.excerpt.rendered.replace(/<\/?[^>]+(>|$)/g, "")}</p>
+              <button class="btn btn-primary mt-auto" data-id="${post.id}">Read More</button>
+            </div>
+          </div>
+        `;
+
+        // Click on button or card to load article detail
+        card.querySelector('button').addEventListener('click', () => loadArticle(post.id));
+
+        articlesEl.appendChild(card);
+      });
+    }
+
+    async function loadArticle(id) {
+      try {
+        const url = `${apiBase}/${id}?_embed`;
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('Failed to load article');
+        const post = await res.json();
+
+        const featuredMedia = post._embedded?.['wp:featuredmedia']?.[0];
+        const imgSrc = featuredMedia?.source_url || 'https://via.placeholder.com/800x400?text=No+Image';
+
+        detailTitle.textContent = post.title.rendered;
+        detailContent.innerHTML = post.content.rendered;
+        detailImage.src = imgSrc;
+
+        listView.style.display = 'none';
+        detailView.style.display = 'block';
+      } catch (err) {
+        alert(err.message);
+      }
+    }
+
+    function renderPagination() {
+      paginationEl.innerHTML = '';
+
+      if (totalPages <= 1) return;
+
+      // Previous button
+      const prevLi = document.createElement('li');
+      prevLi.className = 'page-item ' + (currentPage === 1 ? 'disabled' : '');
+      prevLi.innerHTML = `<a class="page-link" href="#">Previous</a>`;
+      prevLi.addEventListener('click', e => {
+        e.preventDefault();
+        if (currentPage > 1) fetchArticles(currentPage - 1);
+      });
+      paginationEl.appendChild(prevLi);
+
+      // Page numbers (show max 5 pages)
+      const maxPagesToShow = 5;
+      let startPage = Math.max(1, currentPage - Math.floor(maxPagesToShow / 2));
+      let endPage = Math.min(totalPages, startPage + maxPagesToShow - 1);
+      if (endPage - startPage < maxPagesToShow - 1) {
+        startPage = Math.max(1, endPage - maxPagesToShow + 1);
+      }
+
+      for (let i = startPage; i <= endPage; i++) {
+        const li = document.createElement('li');
+        li.className = 'page-item ' + (i === currentPage ? 'active' : '');
+        li.innerHTML = `<a class="page-link" href="#">${i}</a>`;
+        li.addEventListener('click', e => {
+          e.preventDefault();
+          fetchArticles(i);
+        });
+        paginationEl.appendChild(li);
+      }
+
+      // Next button
+      const nextLi = document.createElement('li');
+      nextLi.className = 'page-item ' + (currentPage === totalPages ? 'disabled' : '');
+      nextLi.innerHTML = `<a class="page-link" href="#">Next</a>`;
+      nextLi.addEventListener('click', e => {
+        e.preventDefault();
+        if (currentPage < totalPages) fetchArticles(currentPage + 1);
+      });
+      paginationEl.appendChild(nextLi);
+    }
+
+    // Initial fetch
+    fetchArticles();
+  </script>
+</body>
+</html>
