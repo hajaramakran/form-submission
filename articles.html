@@ -34,11 +34,11 @@
     <!-- List view -->
     <div id="article-list">
       <div id="articles" class="row gy-4"></div>
-   
-    </div>
-  <p>Pagination</p> <nav>
+    <nav>
         <ul id="pagination" class="pagination justify-content-center mt-4"></ul>
       </nav>
+    </div>
+
     <!-- Article detail view -->
     <div id="article-detail">
       <button id="back-btn" class="btn btn-secondary mb-3">← Back to articles</button>
@@ -77,11 +77,13 @@
       const url = `${apiBase}?per_page=${postsPerPage}&page=${page}&_embed`;
       try {
         const res = await fetch(url);
+        console.log([...res.headers.entries()]);
+
         if (!res.ok) throw new Error('Failed to fetch posts');
         const posts = await res.json();
 
         // Total pages in header
-        totalPages = parseInt(res.headers.get('X-WP-TotalPages')) || 1;
+        totalPages = parseInt(res.headers.get('x-wp-totalPages')) || 1;
         currentPage = page;
 
         renderArticles(posts);
